@@ -12,6 +12,7 @@ from insights.parsers.rhsm_releasever import RhsmReleaseVer
 from insights.combiners.virt_what import VirtWhat
 from insights.combiners.sap import Sap
 from insights.combiners.ansible_info import AnsibleInfo
+from insights.combiners.identity_domain import IdentityDomain
 from insights.core import dr
 from insights.parsers.aws_instance_id import AWSInstanceIdDoc, AWSPublicIpv4Addresses
 from insights.parsers.azure_instance import AzureInstancePlan, AzurePublicIpv4Addresses
@@ -79,6 +80,7 @@ GCP_CONFIRMED_CODES = [
     optional=[
         Specs.hostname,
         AnsibleInfo,
+        IdentityDomain,
         AWSInstanceIdDoc,
         AWSPublicIpv4Addresses,
         AzureInstancePlan,
@@ -129,6 +131,7 @@ GCP_CONFIRMED_CODES = [
 def system_profile(
     hostname,
     ansible_info,
+    identity_domain,
     aws_instance_id,
     aws_public_ipv4_addresses,
     azure_instance_plan,
@@ -213,6 +216,32 @@ def system_profile(
         except Exception as e:
             catch_error("ansible_info", e)
             raise
+
+    if identity_domain:
+        # Identity domain is skipped unless system provides at least one valid domain
+        profile["identity_domain"] = {}
+        if identity_domain.default_realm:
+            profile["identity_domain"]["default_realm"] = identity_domain.default_realm
+        profile["identity_domain"]["dns_lookup_realm"] = identity_domain.dns_lookup_realm
+        profile["identity_domain"]["dns_lookup_kdc"] = identity_domain.dns_lookup_kdc
+        profile["identity_domain"]["domains"] = []
+        for domain in identity_domain.domains:
+            domain_info = {
+                "name": domain.name,
+                "domain_type": domain.domain_type,
+                "server_software": domain.server_software,
+                "client_software": domain.client_software,
+            }
+            # optional information, which are not provided for some domain types
+            if domain.domain:
+                domain_info["domain"] = domain.domain
+            if domain.realm:
+                domain_info["realm"] = domain.realm
+            if domain.workgroup:
+                domain_info["workgroup"] = domain.workgroup
+            if domain.ipa_mode:
+                domain_info["ipa_mode"] = domain.ipa_mode
+            profile["identity_domain"]["domains"].append(domain_info)
 
     if aws_instance_id:
         if aws_instance_id.get("marketplaceProductCodes"):
